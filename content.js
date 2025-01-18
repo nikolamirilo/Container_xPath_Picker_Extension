@@ -1,10 +1,48 @@
 let previouslySelectedElement = null;
-let currentXPath = ""; // Store the current XPath for copying
-let isSelecting = false; // Flag to track if the user is drawing a selection rectangle
+let currentXPath = ""; 
+let isSelecting = false; 
 let startX = 0,
-    startY = 0; // Coordinates for the start of the rectangle
-let selectionRectangle = null; // The rectangle element
-let sidebarVisible = true; // Track if the sidebar is visible
+    startY = 0; 
+let selectionRectangle = null; 
+let sidebarVisible = true; 
+
+const getCurrentURL = () => {
+    const currentURL = window.location.href;
+    console.log("Current URL:", currentURL);
+    return currentURL;
+};
+
+const shouldOpenExtension = () => {
+    const urlParams = new URLSearchParams(window.location.search); 
+    return urlParams.has("extension") && urlParams.get("extension") === "true"; 
+};
+
+
+
+const openExtension = () => {
+    const url = getCurrentURL(); // Get the current URL
+    createSidebar(); // Create and display the sidebar
+
+    const urlParams = new URLSearchParams(window.location.search); // Parse the query parameters
+    if (urlParams.has("xpath")) {
+        const xPath = urlParams.get("xpath"); // Get the XPath parameter value
+        const element = getElementByXPath(xPath); // Locate the element using the XPath
+        if (element) {
+            // Apply the border by selecting the element
+            selectElement(element);
+        } else {
+            console.error("Element not found for the provided XPath:", xPath);
+        }
+    }
+};
+
+window.addEventListener("load", () => {
+    if (shouldOpenExtension()) {
+        openExtension(); 
+    } else {
+        console.log("Extension will not open, URL does not contain ?extension=true.");
+    }
+});
 
 // Create a sidebar to display the XPath
 const createSidebar = () => {
@@ -120,7 +158,7 @@ const createSidebar = () => {
     sidebarVisible = true;
 };
 
-createSidebar(); // Ensure the sidebar is created and visible immediately
+//createSidebar(); // Ensure the sidebar is created and visible immediately
 
 const toggleSelectionTool = () => {
     isSelecting = !isSelecting; // Toggle selection mode
@@ -223,16 +261,20 @@ document.addEventListener("click", (event) => {
 const selectElement = (element) => {
     // Generate XPath
     const getXPath = (el) => {
-        if (el.id) return el.id;
+        if (el.nodeType !== 1) return ""; // Skip non-element nodes
         if (el === document.body) return "/html/body";
-
-        let ix = 0;
-        const siblings = el.parentNode.childNodes;
-        for (let i = 0; i < siblings.length; i++) {
-            const sibling = siblings[i];
-            if (sibling === el) return `${getXPath(el.parentNode)}/${el.tagName.toLowerCase()}[${ix + 1}]`;
-            if (sibling.nodeType === 1 && sibling.tagName === el.tagName) ix++;
+    
+        let index = 1;
+        let sibling = el.previousSibling;
+    
+        while (sibling) {
+            if (sibling.nodeType === 1 && sibling.tagName === el.tagName) {
+                index++;
+            }
+            sibling = sibling.previousSibling;
         }
+    
+        return `${getXPath(el.parentNode)}/${el.tagName.toLowerCase()}[${index}]`;
     };
 
     const xpath = getXPath(element);
@@ -342,5 +384,20 @@ const selectChild = () => {
         }
     } else {
         alert("No child element found!");
+    }
+};
+
+const getElementByXPath = (xPath) => {
+    try {
+        return document.evaluate(
+            xPath,
+            document,
+            null,
+            XPathResult.FIRST_ORDERED_NODE_TYPE,
+            null
+        ).singleNodeValue;
+    } catch (error) {
+        console.error("Invalid XPath:", xPath, error);
+        return null;
     }
 };
