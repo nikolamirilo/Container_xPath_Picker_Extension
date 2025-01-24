@@ -1,44 +1,40 @@
 let previouslySelectedElement = null;
-let currentXPath = ""; 
-let isSelecting = false; 
+let currentXPath = null;
+let isSelecting = false;
 let startX = 0,
-    startY = 0; 
-let selectionRectangle = null; 
-let sidebarVisible = true; 
+    startY = 0;
+let selectionRectangle = null;
+let sidebarVisible = true;
+let apiKey = localStorage.getItem("apiKey");
+let urlParams = new URLSearchParams(window.location.search);
+let urlXPath = ""
 
 const shouldOpenExtension = () => {
-    const urlParams = new URLSearchParams(window.location.search); 
-    return urlParams.has("extension") && urlParams.get("extension") === "true"; 
+    return urlParams.has("extension") && urlParams.get("extension") === "true";
 };
 
-
-
 const openExtension = () => {
-    createSidebar(); // Create and display the sidebar
-    const urlParams = new URLSearchParams(window.location.search); // Parse the query parameters
-    if (urlParams.has("xpath")) {
-        const xPath = urlParams.get("xpath"); // Get the XPath parameter value
-        const element = getElementByXPath(xPath); // Locate the element using the XPath
+    createSidebar();
+    const savedXPath = localStorage.getItem("xpath");
+    
+    if (savedXPath && apiKey) {
+        const element = getElementByXPath(savedXPath);
         if (element) {
-            // Apply the border by selecting the element
             selectElement(element);
-        } else {
-            console.error("Element not found for the provided XPath:", xPath);
         }
     }
 };
 
 window.addEventListener("load", () => {
     if (shouldOpenExtension()) {
-        openExtension(); 
-    } else {
-        console.log("Extension will not open, URL does not contain ?extension=true.");
+        // Save URL XPath to localStorage first
+        if (urlParams.has("xpath")) {
+            localStorage.setItem("xpath", urlParams.get("xpath"));
+        }
+        openExtension();
     }
 });
 
-
-
-// Create a sidebar to display the XPath
 const createSidebar = () => {
     const sidebar = document.createElement("div");
     sidebar.id = "xpath-sidebar";
@@ -56,14 +52,62 @@ const createSidebar = () => {
     sidebar.style.fontFamily = "Arial, sans-serif";
     document.body.appendChild(sidebar);
 
-    // Create a row for the heading text and close button
+    // API Key Section
+    const apiKeyContainer = document.createElement("div");
+    apiKeyContainer.id = "api-key-container";
+    apiKeyContainer.style.display = apiKey ? "none" : "block";
+
+    const apiKeyInput = document.createElement("input");
+    apiKeyInput.type = "password";
+    apiKeyInput.placeholder = "Enter API Key";
+    apiKeyInput.style.borderColor = "#6835F4";
+    apiKeyInput.style.borderRadius = "5px";
+    apiKeyInput.style.margin = "10px 0";
+    apiKeyInput.style.padding = "5px";
+    apiKeyInput.style.width = "100%";
+
+    const saveButton = document.createElement("button");
+    saveButton.textContent = "Save API Key";
+    saveButton.style.backgroundColor = "#6835F4";
+    saveButton.style.color = "white";
+    saveButton.style.border = "none";
+    saveButton.style.padding = "8px 12px";
+    saveButton.style.borderRadius = "5px";
+    saveButton.style.cursor = "pointer";
+    saveButton.style.marginTop = "5px";
+    saveButton.onclick = () => {
+        const key = apiKeyInput.value.trim();
+        if (key) {
+            localStorage.setItem("apiKey", key);
+            apiKey = key;
+            apiKeyContainer.style.display = "none";
+            mainContentContainer.style.display = "block";
+            
+            // Check for saved XPath after API key entry
+            const savedXPath = localStorage.getItem("xpath");
+            if (savedXPath) {
+                const element = getElementByXPath(savedXPath);
+                if (element) selectElement(element);
+            }
+        }
+    };
+
+    apiKeyContainer.appendChild(apiKeyInput);
+    apiKeyContainer.appendChild(saveButton);
+    sidebar.appendChild(apiKeyContainer);
+
+    // Main Content Container
+    const mainContentContainer = document.createElement("div");
+    mainContentContainer.id = "main-content-container";
+    mainContentContainer.style.display = apiKey ? "block" : "none";
+
+    // Header Row
     const headerRow = document.createElement("div");
     headerRow.style.display = "flex";
     headerRow.style.justifyContent = "space-between";
     headerRow.style.alignItems = "center";
     headerRow.style.marginBottom = "10px";
 
-    // Sidebar title
     const title = document.createElement("h3");
     title.textContent = "Select XPath";
     title.style.fontSize = "20px";
@@ -72,7 +116,6 @@ const createSidebar = () => {
     title.style.color = "#333";
     headerRow.appendChild(title);
 
-    // Close button
     const closeButton = document.createElement("button");
     closeButton.textContent = "X";
     closeButton.style.backgroundColor = "transparent";
@@ -80,272 +123,19 @@ const createSidebar = () => {
     closeButton.style.border = "none";
     closeButton.style.fontSize = "16px";
     closeButton.style.cursor = "pointer";
+    closeButton.style.position = "relative";
+    closeButton.style.bottom = "5px";
     closeButton.onclick = () => closeSidebar(sidebar);
     headerRow.appendChild(closeButton);
 
-    // Append the header row to the sidebar
-    sidebar.appendChild(headerRow);
+    mainContentContainer.appendChild(headerRow);
 
-    // XPath display container
+    // XPath Container
     const xpathContainer = document.createElement("div");
     xpathContainer.id = "xpath-container";
-    xpathContainer.innerHTML = ` 
-    <div style="padding: 10px; margin-bottom: 10px; background-color: #fff; border: 1px solid #ddd; border-radius: 4px; word-break: break-word;">
-        <p style="color:black;">xPath: </p>
-        <button id="copy-button" style="
-            display: block;
-            margin-top: 10px;
-            background-color: #6835F4; 
-            color: white; 
-            border: none; 
-            padding: 5px 10px; 
-            border-radius: 5px; 
-            cursor: pointer;
-        ">Copy</button>
-    </div>
-`;
-    sidebar.appendChild(xpathContainer);
-
-    // Add buttons for additional actions
-    const buttonContainer = document.createElement("div");
-    buttonContainer.style.display = "flex";
-    buttonContainer.style.flexDirection = "column";
-    buttonContainer.style.gap = "10px";
-    buttonContainer.style.marginTop = "10px";
-
-    const selectionButton = document.createElement("button");
-    selectionButton.textContent = "Selection Tool";
-    selectionButton.style.backgroundColor = "#6835F4";
-    selectionButton.style.color = "white";
-    selectionButton.style.border = "none";
-    selectionButton.style.padding = "8px 12px";
-    selectionButton.style.borderRadius = "5px";
-    selectionButton.style.cursor = "pointer";
-    selectionButton.onclick = () => toggleSelectionTool();
-
-    const selectParentButton = document.createElement("button");
-    selectParentButton.textContent = "Select Parent";
-    selectParentButton.style.backgroundColor = "#6835F4";
-    selectParentButton.style.color = "white";
-    selectParentButton.style.border = "none";
-    selectParentButton.style.padding = "8px 12px";
-    selectParentButton.style.borderRadius = "5px";
-    selectParentButton.style.cursor = "pointer";
-    selectParentButton.onclick = () => selectParent();
-
-    const selectChildButton = document.createElement("button");
-    selectChildButton.textContent = "Select Child";
-    selectChildButton.style.backgroundColor = "#6835F4";
-    selectChildButton.style.color = "white";
-    selectChildButton.style.border = "none";
-    selectChildButton.style.padding = "8px 12px";
-    selectChildButton.style.borderRadius = "5px";
-    selectChildButton.style.cursor = "pointer";
-    selectChildButton.onclick = () => selectChild();
-
-    buttonContainer.appendChild(selectionButton);
-    buttonContainer.appendChild(selectParentButton);
-    buttonContainer.appendChild(selectChildButton);
-
-    sidebar.appendChild(buttonContainer);
-
-    sidebarVisible = true;
-};
-
-//createSidebar(); // Ensure the sidebar is created and visible immediately
-
-const toggleSelectionTool = () => {
-    isSelecting = !isSelecting; // Toggle selection mode
-
-    if (isSelecting) {
-        document.body.style.cursor = "crosshair";
-    } else {
-        document.body.style.cursor = "default";
-        if (selectionRectangle) {
-            selectionRectangle.remove(); // Remove the rectangle if selection is canceled
-            selectionRectangle = null;
-        }
-    }
-};
-
-// Handle mouse events for drawing the selection rectangle
-document.addEventListener("mousedown", (event) => {
-    if (!isSelecting) return; // If selection is not active, ignore mouse events
-
-    // Prevent default behavior (e.g., link clicks, drag behavior)
-    event.preventDefault();
-
-    // Initialize the selection rectangle's start position
-    startX = event.pageX;
-    startY = event.pageY;
-
-    // Create a rectangle for the selection area
-    selectionRectangle = document.createElement("div");
-    selectionRectangle.style.position = "absolute";
-    selectionRectangle.style.border = "2px dashed #6835F4";
-    selectionRectangle.style.backgroundColor = "rgba(104, 53, 244, 0.2)";
-    selectionRectangle.style.pointerEvents = "none"; // Prevent interaction with the rectangle
-    document.body.appendChild(selectionRectangle);
-
-    // Set initial size of the rectangle to 0
-    selectionRectangle.style.left = `${startX}px`;
-    selectionRectangle.style.top = `${startY}px`;
-    selectionRectangle.style.width = "0px";
-    selectionRectangle.style.height = "0px";
-});
-
-document.addEventListener("mousemove", (event) => {
-    if (!isSelecting || !selectionRectangle) return;
-
-    // Prevent default behavior
-    event.preventDefault();
-
-    // Calculate the current width and height of the rectangle
-    const width = event.pageX - startX;
-    const height = event.pageY - startY;
-
-    // Adjust the position and size of the rectangle as the mouse moves
-    selectionRectangle.style.width = `${Math.abs(width)}px`;
-    selectionRectangle.style.height = `${Math.abs(height)}px`;
-    if (width < 0) selectionRectangle.style.left = `${event.pageX}px`;
-    if (height < 0) selectionRectangle.style.top = `${event.pageY}px`;
-});
-
-document.addEventListener("mouseup", (event) => {
-    if (!isSelecting || !selectionRectangle) return;
-
-    // Stop drawing when the user releases the mouse button
-    isSelecting = false;
-    document.body.style.cursor = "default";
-
-    // Get the selected area and find the element inside the rectangle
-    const rect = selectionRectangle.getBoundingClientRect();
-    const selectedElement = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
-
-    // Check if the selected element is valid
-    if (selectedElement) {
-        selectElement(selectedElement);
-    }
-
-    // Remove the selection rectangle
-    selectionRectangle.remove();
-    selectionRectangle = null;
-});
-
-// Handle direct clicks to select an element
-document.addEventListener("click", (event) => {
-    if (isSelecting) return; // Ignore clicks when in selection mode
-
-    const element = event.target;
-
-    // Check if the clicked element is inside the sidebar
-    if (isElementInSidebar(element)) {
-        console.log("Clicked inside the sidebar, skipping selection.");
-        return; // Do not process clicks inside the sidebar
-    }
-
-    // Clear the previous selection
-    if (previouslySelectedElement) {
-        previouslySelectedElement.style.outline = ""; // Remove the outline
-    }
-
-    selectElement(element);
-});
-
-
-
-// Add click event for the copy button outside of the main click event to avoid resetting XPath
-document.body.addEventListener("click", (event) => {
-    if (event.target.id === "copy-button") {
-        navigator.clipboard.writeText(currentXPath).then(() => {
-            alert("XPath copied to clipboard!");
-        });
-    }
-});
-
-// Function to close the sidebar and exit the extension
-const closeSidebar = (sidebar) => {
-    // Hide the sidebar
-    sidebar.style.display = "none";
-    sidebarVisible = false;
-
-    // Exit the selection mode if active
-    if (isSelecting) {
-        isSelecting = false;
-        document.body.style.cursor = "default";
-        if (selectionRectangle) {
-            selectionRectangle.remove();
-            selectionRectangle = null;
-        }
-    }
-};
-
-const isElementInSidebar = (element) => {
-    const sidebar = document.getElementById("xpath-sidebar");
-    return sidebar.contains(element);
-};
-
-const getXPath = (el) => {
-    if (!el || el.nodeType !== 1) return ""; // Check if el is null or not an element node
-    if (el === document.body) return "/html/body"; // Base case for recursion
-
-    let index = 1;
-    let sibling = el.previousSibling;
-
-    while (sibling) {
-        if (sibling.nodeType === 1 && sibling.tagName === el.tagName) {
-            index++;
-        }
-        sibling = sibling.previousSibling;
-    }
-
-    const parentXPath = getXPath(el.parentNode); // Recurse for parent
-    return `${parentXPath}/${el.tagName.toLowerCase()}[${index}]`; // Append current node
-};
-
-const selectElement = (element) => {
-    if (!element) return;
-
-    // Generate full XPath for the selected element
-    const xpath = getXPath(element);
-
-    // Remove the border for the previously selected element
-    if (previouslySelectedElement) {
-        const existingOverlay = document.getElementById("selection-border-overlay");
-        if (existingOverlay) {
-            existingOverlay.remove();
-        }
-    }
-
-    // Create a border overlay
-    const overlay = document.createElement("div");
-    overlay.id = "selection-border-overlay";
-
-    // Get the element's position and size
-    const rect = element.getBoundingClientRect();
-
-    overlay.style.position = "absolute";
-    overlay.style.left = `${rect.left + window.scrollX}px`;
-    overlay.style.top = `${rect.top + window.scrollY}px`;
-    overlay.style.width = `${rect.width}px`;
-    overlay.style.height = `${rect.height}px`;
-    overlay.style.border = "3px solid #6835F4"; // Border color
-    overlay.style.boxShadow = "0 0 10px 2px rgba(104, 53, 244, 0.75)"; // Glow effect
-    overlay.style.pointerEvents = "none"; // Ensure it doesn't block interaction
-    overlay.style.zIndex = "9999"; // Bring it above all other content
-
-    // Append the overlay to the body
-    document.body.appendChild(overlay);
-
-    // Update the reference for the previously selected element
-    previouslySelectedElement = element;
-    currentXPath = xpath;
-
-    // Update the sidebar with the XPath
-    const xpathContainer = document.getElementById("xpath-container");
-    xpathContainer.innerHTML = ` 
+    xpathContainer.innerHTML = `
         <div style="padding: 10px; margin-bottom: 10px; background-color: #fff; border: 1px solid #ddd; border-radius: 4px; word-break: break-word;">
-            <p style="color:black;">xPath: ${currentXPath}</p>
+            <p style="color:black; margin: 0 0 5px 0;">xPath: ${currentXPath || ''}</p>
             <button id="copy-button" style="
                 display: block;
                 margin-top: 10px;
@@ -358,23 +148,254 @@ const selectElement = (element) => {
             ">Copy</button>
         </div>
     `;
+    mainContentContainer.appendChild(xpathContainer);
+
+    // Button Container
+    const buttonContainer = document.createElement("div");
+    buttonContainer.style.display = "flex";
+    buttonContainer.style.flexDirection = "column";
+    buttonContainer.style.gap = "10px";
+    buttonContainer.style.marginTop = "10px";
+
+    // Add Tools
+    buttonContainer.appendChild(createToolButton("Selection Tool", toggleSelectionTool));
+    buttonContainer.appendChild(createToolButton("Select Parent", selectParent));
+    buttonContainer.appendChild(createToolButton("Select Child", selectChild));
+
+    // Reset API Key Button
+    const resetButton = document.createElement("button");
+    resetButton.textContent = "Reset API Key";
+    resetButton.style.backgroundColor = "#ff4c4c";
+    resetButton.style.color = "white";
+    resetButton.style.border = "none";
+    resetButton.style.padding = "8px 12px";
+    resetButton.style.borderRadius = "5px";
+    resetButton.style.cursor = "pointer";
+    resetButton.onclick = () => {
+        localStorage.removeItem("apiKey");
+        apiKey = null;
+        mainContentContainer.style.display = "none";
+        apiKeyContainer.style.display = "block";
+        currentXPath = null;
+        if (previouslySelectedElement) {
+            const existingOverlay = document.getElementById("selection-border-overlay");
+            if (existingOverlay) existingOverlay.remove();
+            previouslySelectedElement = null;
+        }
+        updateXpathDisplay();
+    };
+    buttonContainer.appendChild(resetButton);
+
+    mainContentContainer.appendChild(buttonContainer);
+    sidebar.appendChild(mainContentContainer);
+    sidebarVisible = true;
 };
 
+const createToolButton = (text, onClick) => {
+    const button = document.createElement("button");
+    button.textContent = text;
+    button.style.backgroundColor = "#6835F4";
+    button.style.color = "white";
+    button.style.border = "none";
+    button.style.padding = "8px 12px";
+    button.style.borderRadius = "5px";
+    button.style.cursor = "pointer";
+    button.onclick = () => {
+        if (!apiKey) {
+            console.log("Please enter an API key first!");
+            return;
+        }
+        onClick();
+    };
+    return button;
+};
+
+const toggleSelectionTool = () => {
+    isSelecting = !isSelecting;
+    if (isSelecting) {
+        document.body.style.cursor = "crosshair";
+    } else {
+        document.body.style.cursor = "default";
+        if (selectionRectangle) {
+            selectionRectangle.remove();
+            selectionRectangle = null;
+        }
+    }
+};
+
+document.addEventListener("mousedown", (event) => {
+    if (!isSelecting || !apiKey) {
+        if (!apiKey) console.log("Please enter an API key first!");
+        return;
+    }
+    event.preventDefault();
+    startX = event.pageX;
+    startY = event.pageY;
+    selectionRectangle = document.createElement("div");
+    selectionRectangle.style.position = "absolute";
+    selectionRectangle.style.border = "2px dashed #6835F4";
+    selectionRectangle.style.backgroundColor = "rgba(104, 53, 244, 0.2)";
+    selectionRectangle.style.pointerEvents = "none";
+    document.body.appendChild(selectionRectangle);
+    selectionRectangle.style.left = `${startX}px`;
+    selectionRectangle.style.top = `${startY}px`;
+    selectionRectangle.style.width = "0px";
+    selectionRectangle.style.height = "0px";
+});
+
+document.addEventListener("mousemove", (event) => {
+    if (!isSelecting || !selectionRectangle) return;
+    event.preventDefault();
+    const width = event.pageX - startX;
+    const height = event.pageY - startY;
+    selectionRectangle.style.width = `${Math.abs(width)}px`;
+    selectionRectangle.style.height = `${Math.abs(height)}px`;
+    if (width < 0) selectionRectangle.style.left = `${event.pageX}px`;
+    if (height < 0) selectionRectangle.style.top = `${event.pageY}px`;
+});
+
+document.addEventListener("mouseup", (event) => {
+    if (!isSelecting || !selectionRectangle) return;
+    isSelecting = false;
+    document.body.style.cursor = "default";
+    const rect = selectionRectangle.getBoundingClientRect();
+    const selectedElement = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    if (selectedElement) {
+        selectElement(selectedElement);
+    }
+    selectionRectangle.remove();
+    selectionRectangle = null;
+});
+
+document.addEventListener("click", (event) => {
+    if (isSelecting || !apiKey) {
+        if (!apiKey) console.log("Please enter an API key first!");
+        return;
+    }
+    const element = event.target;
+    if (isElementInSidebar(element)) {
+        console.log("Clicked inside the sidebar, skipping selection.");
+        return;
+    }
+    if (previouslySelectedElement) {
+        previouslySelectedElement.style.outline = "";
+    }
+    selectElement(element);
+});
+
+document.body.addEventListener("click", (event) => {
+    if (event.target.id === "copy-button") {
+        if (!currentXPath) {
+            alert("No XPath to copy!");
+            return;
+        }
+        navigator.clipboard.writeText(currentXPath).then(() => {
+            alert("XPath copied to clipboard!");
+        });
+    }
+});
+
+const closeSidebar = (sidebar) => {
+    sidebar.style.display = "none";
+    sidebarVisible = false;
+    if (isSelecting) {
+        isSelecting = false;
+        document.body.style.cursor = "default";
+        if (selectionRectangle) {
+            selectionRectangle.remove();
+            selectionRectangle = null;
+        }
+    }
+};
+
+const isElementInSidebar = (element) => {
+    const sidebar = document.getElementById("xpath-sidebar");
+    return sidebar && sidebar.contains(element);
+};
+
+const getXPath = (el) => {
+    if (!el || el.nodeType !== 1) return "";
+    if (el === document.body) return "/html/body";
+    let index = 1;
+    let sibling = el.previousSibling;
+    while (sibling) {
+        if (sibling.nodeType === 1 && sibling.tagName === el.tagName) {
+            index++;
+        }
+        sibling = sibling.previousSibling;
+    }
+    const parentXPath = getXPath(el.parentNode);
+    return `${parentXPath}/${el.tagName.toLowerCase()}[${index}]`;
+};
+
+const selectElement = (element) => {
+    if (!apiKey) {
+        console.log("Please enter an API key first!");
+        return;
+    }
+    if (!element) return;
+    
+    const xpath = getXPath(element);
+    const childCount = element.children.length;
+
+    if (previouslySelectedElement) {
+        const existingOverlay = document.getElementById("selection-border-overlay");
+        if (existingOverlay) existingOverlay.remove();
+    }
+
+    const overlay = document.createElement("div");
+    overlay.id = "selection-border-overlay";
+    const rect = element.getBoundingClientRect();
+    overlay.style.position = "absolute";
+    overlay.style.left = `${rect.left + window.scrollX}px`;
+    overlay.style.top = `${rect.top + window.scrollY}px`;
+    overlay.style.width = `${rect.width}px`;
+    overlay.style.height = `${rect.height}px`;
+    overlay.style.border = "3px solid #6835F4";
+    overlay.style.boxShadow = "0 0 10px 2px rgba(104, 53, 244, 0.75)";
+    overlay.style.pointerEvents = "none";
+    overlay.style.zIndex = "9999";
+    document.body.appendChild(overlay);
+
+    previouslySelectedElement = element;
+    currentXPath = xpath;
+    updateXpathDisplay(childCount);
+};
+
+const updateXpathDisplay = (childCount = 0) => {
+    const xpathContainer = document.getElementById("xpath-container");
+    if (!xpathContainer) return;
+    
+    xpathContainer.innerHTML = `
+    <div style="display:flex;flex-direction:column;">
+        <div style="padding: 10px; margin-bottom: 10px; background-color: #fff; 
+            border: 1px solid #ddd; border-radius: 4px; word-break: break-word;">
+            <code style="color: #6835F4; font-family: monospace;">${currentXPath || 'No selection'}</code>
+            <button id="copy-button" style="
+                display: block;
+                margin-top: 10px;
+                background-color: ${currentXPath ? '#6835F4' : '#999'}; 
+                color: white; 
+                border: none; 
+                padding: 5px 10px; 
+                border-radius: 5px; 
+                cursor: ${currentXPath ? 'pointer' : 'not-allowed'};
+            " ${!currentXPath ? 'disabled' : ''}>Copy XPath</button>
+        </div>
+        <p style="font-size: 16px;color:black;">Rows: <strong>${childCount}</strong></p>
+    </div>`;
+};
 
 const selectParent = () => {
-    if (
-        previouslySelectedElement &&
-        previouslySelectedElement.parentElement &&
-        !isElementInSidebar(previouslySelectedElement.parentElement)
-    ) {
+    if (!apiKey) {
+        console.log("Please enter an API key first!");
+        return;
+    }
+    if (previouslySelectedElement?.parentElement && !isElementInSidebar(previouslySelectedElement.parentElement)) {
         const parentElement = previouslySelectedElement.parentElement;
-
-        // Clear the previous selection
         if (previouslySelectedElement) {
             previouslySelectedElement.style.outline = "";
         }
-
-        // Select the parent element
         selectElement(parentElement);
     } else {
         alert("No valid parent element found!");
@@ -382,21 +403,16 @@ const selectParent = () => {
 };
 
 const selectChild = () => {
-    if (
-        previouslySelectedElement &&
-        previouslySelectedElement.children.length > 0
-    ) {
+    if (!apiKey) {
+        console.log("Please enter an API key first!");
+        return;
+    }
+    if (previouslySelectedElement?.children?.length > 0) {
         const childElement = Array.from(previouslySelectedElement.children).find(
             (child) => !isElementInSidebar(child)
         );
-
         if (childElement) {
-            // Clear the previous selection
-            if (previouslySelectedElement) {
-                previouslySelectedElement.style.outline = "";
-            }
-
-            // Select the child element and update XPath
+            previouslySelectedElement.style.outline = "";
             selectElement(childElement);
         } else {
             alert("No valid child element found!");
@@ -405,7 +421,6 @@ const selectChild = () => {
         alert("No child element found!");
     }
 };
-
 
 const getElementByXPath = (xPath) => {
     try {
