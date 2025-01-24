@@ -6,12 +6,6 @@ let startX = 0,
 let selectionRectangle = null; 
 let sidebarVisible = true; 
 
-const getCurrentURL = () => {
-    const currentURL = window.location.href;
-    console.log("Current URL:", currentURL);
-    return currentURL;
-};
-
 const shouldOpenExtension = () => {
     const urlParams = new URLSearchParams(window.location.search); 
     return urlParams.has("extension") && urlParams.get("extension") === "true"; 
@@ -20,9 +14,7 @@ const shouldOpenExtension = () => {
 
 
 const openExtension = () => {
-    const url = getCurrentURL(); // Get the current URL
     createSidebar(); // Create and display the sidebar
-
     const urlParams = new URLSearchParams(window.location.search); // Parse the query parameters
     if (urlParams.has("xpath")) {
         const xPath = urlParams.get("xpath"); // Get the XPath parameter value
@@ -43,6 +35,8 @@ window.addEventListener("load", () => {
         console.log("Extension will not open, URL does not contain ?extension=true.");
     }
 });
+
+
 
 // Create a sidebar to display the XPath
 const createSidebar = () => {
@@ -258,55 +252,7 @@ document.addEventListener("click", (event) => {
     selectElement(element);
 });
 
-const selectElement = (element) => {
-    // Generate XPath
-    const getXPath = (el) => {
-        if (el.nodeType !== 1) return ""; // Skip non-element nodes
-        if (el === document.body) return "/html/body";
-    
-        let index = 1;
-        let sibling = el.previousSibling;
-    
-        while (sibling) {
-            if (sibling.nodeType === 1 && sibling.tagName === el.tagName) {
-                index++;
-            }
-            sibling = sibling.previousSibling;
-        }
-    
-        return `${getXPath(el.parentNode)}/${el.tagName.toLowerCase()}[${index}]`;
-    };
 
-    const xpath = getXPath(element);
-
-    // If an element is already selected, remove its outline
-    if (previouslySelectedElement) {
-        previouslySelectedElement.style.outline = "";
-    }
-
-    // Highlight the new element with a border
-    element.style.outline = "3px solid #6835F4";
-    previouslySelectedElement = element; // Update the reference to the new selection
-    currentXPath = xpath;
-
-    // Update the sidebar with the XPath
-    const xpathContainer = document.getElementById("xpath-container");
-    xpathContainer.innerHTML = ` 
-        <div style="padding: 10px; margin-bottom: 10px; background-color: #fff; border: 1px solid #ddd; border-radius: 4px; word-break: break-word;">
-            <p style="color:black;">xPath: ${currentXPath}</p>
-            <button id="copy-button" style="
-                display: block;
-                margin-top: 10px;
-                background-color: #6835F4; 
-                color: white; 
-                border: none; 
-                padding: 5px 10px; 
-                border-radius: 5px; 
-                cursor: pointer;
-            ">Copy</button>
-        </div>
-    `;
-};
 
 // Add click event for the copy button outside of the main click event to avoid resetting XPath
 document.body.addEventListener("click", (event) => {
@@ -334,11 +280,86 @@ const closeSidebar = (sidebar) => {
     }
 };
 
-// Helper function to check if an element is in the sidebar
 const isElementInSidebar = (element) => {
     const sidebar = document.getElementById("xpath-sidebar");
     return sidebar.contains(element);
 };
+
+const getXPath = (el) => {
+    if (!el || el.nodeType !== 1) return ""; // Check if el is null or not an element node
+    if (el === document.body) return "/html/body"; // Base case for recursion
+
+    let index = 1;
+    let sibling = el.previousSibling;
+
+    while (sibling) {
+        if (sibling.nodeType === 1 && sibling.tagName === el.tagName) {
+            index++;
+        }
+        sibling = sibling.previousSibling;
+    }
+
+    const parentXPath = getXPath(el.parentNode); // Recurse for parent
+    return `${parentXPath}/${el.tagName.toLowerCase()}[${index}]`; // Append current node
+};
+
+const selectElement = (element) => {
+    if (!element) return;
+
+    // Generate full XPath for the selected element
+    const xpath = getXPath(element);
+
+    // Remove the border for the previously selected element
+    if (previouslySelectedElement) {
+        const existingOverlay = document.getElementById("selection-border-overlay");
+        if (existingOverlay) {
+            existingOverlay.remove();
+        }
+    }
+
+    // Create a border overlay
+    const overlay = document.createElement("div");
+    overlay.id = "selection-border-overlay";
+
+    // Get the element's position and size
+    const rect = element.getBoundingClientRect();
+
+    overlay.style.position = "absolute";
+    overlay.style.left = `${rect.left + window.scrollX}px`;
+    overlay.style.top = `${rect.top + window.scrollY}px`;
+    overlay.style.width = `${rect.width}px`;
+    overlay.style.height = `${rect.height}px`;
+    overlay.style.border = "3px solid #6835F4"; // Border color
+    overlay.style.boxShadow = "0 0 10px 2px rgba(104, 53, 244, 0.75)"; // Glow effect
+    overlay.style.pointerEvents = "none"; // Ensure it doesn't block interaction
+    overlay.style.zIndex = "9999"; // Bring it above all other content
+
+    // Append the overlay to the body
+    document.body.appendChild(overlay);
+
+    // Update the reference for the previously selected element
+    previouslySelectedElement = element;
+    currentXPath = xpath;
+
+    // Update the sidebar with the XPath
+    const xpathContainer = document.getElementById("xpath-container");
+    xpathContainer.innerHTML = ` 
+        <div style="padding: 10px; margin-bottom: 10px; background-color: #fff; border: 1px solid #ddd; border-radius: 4px; word-break: break-word;">
+            <p style="color:black;">xPath: ${currentXPath}</p>
+            <button id="copy-button" style="
+                display: block;
+                margin-top: 10px;
+                background-color: #6835F4; 
+                color: white; 
+                border: none; 
+                padding: 5px 10px; 
+                border-radius: 5px; 
+                cursor: pointer;
+            ">Copy</button>
+        </div>
+    `;
+};
+
 
 const selectParent = () => {
     if (
@@ -346,10 +367,9 @@ const selectParent = () => {
         previouslySelectedElement.parentElement &&
         !isElementInSidebar(previouslySelectedElement.parentElement)
     ) {
-        // Select and highlight the parent element
         const parentElement = previouslySelectedElement.parentElement;
 
-        // Clear previous selection
+        // Clear the previous selection
         if (previouslySelectedElement) {
             previouslySelectedElement.style.outline = "";
         }
@@ -366,18 +386,17 @@ const selectChild = () => {
         previouslySelectedElement &&
         previouslySelectedElement.children.length > 0
     ) {
-        // Find the first child element that is not in the sidebar
         const childElement = Array.from(previouslySelectedElement.children).find(
             (child) => !isElementInSidebar(child)
         );
 
         if (childElement) {
-            // Clear previous selection
+            // Clear the previous selection
             if (previouslySelectedElement) {
                 previouslySelectedElement.style.outline = "";
             }
 
-            // Select the child element
+            // Select the child element and update XPath
             selectElement(childElement);
         } else {
             alert("No valid child element found!");
@@ -386,6 +405,7 @@ const selectChild = () => {
         alert("No child element found!");
     }
 };
+
 
 const getElementByXPath = (xPath) => {
     try {
