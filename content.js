@@ -246,26 +246,80 @@ document.addEventListener("mousedown", (event) => {
 document.addEventListener("mousemove", (event) => {
     if (!isSelecting || !selectionRectangle) return;
     event.preventDefault();
+
+    // Consider scroll position
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
+    
     const width = event.pageX - startX;
     const height = event.pageY - startY;
+
     selectionRectangle.style.width = `${Math.abs(width)}px`;
     selectionRectangle.style.height = `${Math.abs(height)}px`;
-    if (width < 0) selectionRectangle.style.left = `${event.pageX}px`;
-    if (height < 0) selectionRectangle.style.top = `${event.pageY}px`;
+    
+    // Adjust positions with scroll offset
+    if (width < 0) {
+        selectionRectangle.style.left = `${event.pageX - scrollX}px`;
+    }
+    if (height < 0) {
+        selectionRectangle.style.top = `${event.pageY - scrollY}px`;
+    }
 });
 
 document.addEventListener("mouseup", (event) => {
     if (!isSelecting || !selectionRectangle) return;
     isSelecting = false;
     document.body.style.cursor = "default";
+
+    // Get the selection rectangle coordinates
     const rect = selectionRectangle.getBoundingClientRect();
-    const selectedElement = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    const elements = [];
+    
+    // Check multiple points in a grid pattern
+    const steps = 5;
+    const stepX = rect.width / steps;
+    const stepY = rect.height / steps;
+
+    for (let i = 0; i < steps; i++) {
+        for (let j = 0; j < steps; j++) {
+            const x = rect.left + (i * stepX) + (stepX/2);
+            const y = rect.top + (j * stepY) + (stepY/2);
+            const el = document.elementFromPoint(x, y);
+            if (el && !isElementInSidebar(el)) {
+                elements.push(el);
+            }
+        }
+    }
+
+    // Find the deepest common element
+    let selectedElement = null;
+    if (elements.length > 0) {
+        // Sort elements by depth in DOM tree
+        const sortedElements = elements.sort((a, b) => {
+            return getElementDepth(b) - getElementDepth(a);
+        });
+        
+        // Find the most common deep element
+        selectedElement = sortedElements[0];
+    }
+
     if (selectedElement) {
         selectElement(selectedElement);
     }
+
     selectionRectangle.remove();
     selectionRectangle = null;
 });
+
+// Helper function to calculate DOM depth
+const getElementDepth = (el) => {
+    let depth = 0;
+    while (el.parentElement) {
+        depth++;
+        el = el.parentElement;
+    }
+    return depth;
+};
 
 document.addEventListener("click", (event) => {
     if (isSelecting || !apiKey) {
@@ -316,16 +370,25 @@ const isElementInSidebar = (element) => {
 const getXPath = (el) => {
     if (!el || el.nodeType !== 1) return "";
     if (el === document.body) return "/html/body";
+
     let index = 1;
-    let sibling = el.previousSibling;
+    let sibling = el.previousElementSibling;
+    
+    // Count only elements with the same tag name
     while (sibling) {
-        if (sibling.nodeType === 1 && sibling.tagName === el.tagName) {
+        if (sibling.nodeName === el.nodeName) {
             index++;
         }
-        sibling = sibling.previousSibling;
+        sibling = sibling.previousElementSibling;
     }
-    const parentXPath = getXPath(el.parentNode);
-    return `${parentXPath}/${el.tagName.toLowerCase()}[${index}]`;
+
+    const parentXPath = getXPath(el.parentElement);
+    const tagName = el.tagName.toLowerCase();
+    
+    // Use more specific indexing
+    return index > 1 
+        ? `${parentXPath}/${tagName}[${index}]`
+        : `${parentXPath}/${tagName}`;
 };
 
 const selectElement = (element) => {
@@ -382,7 +445,7 @@ const updateXpathDisplay = (childCount = 0) => {
                 cursor: ${currentXPath ? 'pointer' : 'not-allowed'};
             " ${!currentXPath ? 'disabled' : ''}>Copy XPath</button>
         </div>
-        <p style="font-size: 16px;color:black;">Rows: <strong>${childCount}</strong></p>
+        <p style="font-size: 16px;color:black;">Children: <strong>${childCount}</strong></p>
     </div>`;
 };
 
