@@ -9,16 +9,27 @@ let apiKey = localStorage.getItem("apiKey");
 let urlParams = new URLSearchParams(window.location.search);
 let urlXPath = ""
 
+const link = document.createElement('link');
+link.rel = 'stylesheet';
+link.type = 'text/css';
+link.href = chrome.runtime.getURL('styles.css');
+document.head.appendChild(link);
+
 const shouldOpenExtension = () => {
     return urlParams.has("extension") && urlParams.get("extension") === "true";
 };
 
 const openExtension = () => {
     createSidebar();
-    const savedXPath = localStorage.getItem("xpath");
-    
-    if (savedXPath && apiKey) {
-        const element = getElementByXPath(savedXPath);
+    const scraper = {
+        robot_id: urlParams.get("robot_id"),
+        mode: urlParams.get("mode"),
+        xpath: urlParams.get("xpath"),
+
+    }
+    localStorage.setItem("scraper", JSON.stringify(scraper))
+    if (scraper.xpath && apiKey) {
+        const element = getElementByXPath(scraper.xpath);
         if (element) {
             selectElement(element);
         }
@@ -27,10 +38,9 @@ const openExtension = () => {
 
 window.addEventListener("load", () => {
     if (shouldOpenExtension()) {
-        // Save URL XPath to localStorage first
-        if (urlParams.has("xpath")) {
-            localStorage.setItem("xpath", urlParams.get("xpath"));
-        }
+        // if (urlParams.has("xpath")) {
+        //     localStorage.setItem("xpath", urlParams.get("xpath"));
+        // }
         openExtension();
     }
 });
@@ -38,18 +48,6 @@ window.addEventListener("load", () => {
 const createSidebar = () => {
     const sidebar = document.createElement("div");
     sidebar.id = "xpath-sidebar";
-    sidebar.style.position = "fixed";
-    sidebar.style.top = "0";
-    sidebar.style.right = "0";
-    sidebar.style.width = "300px";
-    sidebar.style.height = "100vh";
-    sidebar.style.backgroundColor = "#f4f4f4";
-    sidebar.style.borderLeft = "2px solid #ccc";
-    sidebar.style.boxShadow = "-2px 0 5px rgba(0, 0, 0, 0.1)";
-    sidebar.style.overflowY = "auto";
-    sidebar.style.padding = "10px";
-    sidebar.style.zIndex = "10000";
-    sidebar.style.fontFamily = "Arial, sans-serif";
     document.body.appendChild(sidebar);
 
     // API Key Section
@@ -58,23 +56,13 @@ const createSidebar = () => {
     apiKeyContainer.style.display = apiKey ? "none" : "block";
 
     const apiKeyInput = document.createElement("input");
+    apiKeyInput.id = "api-key-input"
     apiKeyInput.type = "password";
     apiKeyInput.placeholder = "Enter API Key";
-    apiKeyInput.style.borderColor = "#6835F4";
-    apiKeyInput.style.borderRadius = "5px";
-    apiKeyInput.style.margin = "10px 0";
-    apiKeyInput.style.padding = "5px";
-    apiKeyInput.style.width = "100%";
 
     const saveButton = document.createElement("button");
     saveButton.textContent = "Save API Key";
-    saveButton.style.backgroundColor = "#6835F4";
-    saveButton.style.color = "white";
-    saveButton.style.border = "none";
-    saveButton.style.padding = "8px 12px";
-    saveButton.style.borderRadius = "5px";
-    saveButton.style.cursor = "pointer";
-    saveButton.style.marginTop = "5px";
+    saveButton.id = "save-button"
     saveButton.onclick = () => {
         const key = apiKeyInput.value.trim();
         if (key) {
@@ -84,9 +72,9 @@ const createSidebar = () => {
             mainContentContainer.style.display = "block";
             
             // Check for saved XPath after API key entry
-            const savedXPath = localStorage.getItem("xpath");
-            if (savedXPath) {
-                const element = getElementByXPath(savedXPath);
+            const scraper = JSON.parse(localStorage.getItem("scraper"));
+            if (scraper.xpath) {
+                const element = getElementByXPath(scraper.xpath);
                 if (element) selectElement(element);
             }
         }
@@ -103,28 +91,15 @@ const createSidebar = () => {
 
     // Header Row
     const headerRow = document.createElement("div");
-    headerRow.style.display = "flex";
-    headerRow.style.justifyContent = "space-between";
-    headerRow.style.alignItems = "center";
-    headerRow.style.marginBottom = "10px";
+    headerRow.id = "header-row"
 
     const title = document.createElement("h3");
     title.textContent = "Select XPath";
-    title.style.fontSize = "20px";
-    title.style.fontWeight = "bold";
-    title.style.margin = "0";
-    title.style.color = "#333";
     headerRow.appendChild(title);
 
     const closeButton = document.createElement("button");
     closeButton.textContent = "X";
-    closeButton.style.backgroundColor = "transparent";
-    closeButton.style.color = "#ff4c4c";
-    closeButton.style.border = "none";
-    closeButton.style.fontSize = "16px";
-    closeButton.style.cursor = "pointer";
-    closeButton.style.position = "relative";
-    closeButton.style.bottom = "5px";
+    closeButton.id = "close-button"
     closeButton.onclick = () => closeSidebar(sidebar);
     headerRow.appendChild(closeButton);
 
@@ -134,28 +109,16 @@ const createSidebar = () => {
     const xpathContainer = document.createElement("div");
     xpathContainer.id = "xpath-container";
     xpathContainer.innerHTML = `
-        <div style="padding: 10px; margin-bottom: 10px; background-color: #fff; border: 1px solid #ddd; border-radius: 4px; word-break: break-word;">
+        <div id="content">
             <p style="color:black; margin: 0 0 5px 0;">xPath: ${currentXPath || ''}</p>
-            <button id="copy-button" style="
-                display: block;
-                margin-top: 10px;
-                background-color: #6835F4; 
-                color: white; 
-                border: none; 
-                padding: 5px 10px; 
-                border-radius: 5px; 
-                cursor: pointer;
-            ">Copy</button>
+            <button id="copy-button">Copy</button>
         </div>
     `;
     mainContentContainer.appendChild(xpathContainer);
 
     // Button Container
     const buttonContainer = document.createElement("div");
-    buttonContainer.style.display = "flex";
-    buttonContainer.style.flexDirection = "column";
-    buttonContainer.style.gap = "10px";
-    buttonContainer.style.marginTop = "10px";
+    buttonContainer.id = "button-container"
 
     // Add Tools
     buttonContainer.appendChild(createToolButton("Selection Tool", toggleSelectionTool));
@@ -165,12 +128,7 @@ const createSidebar = () => {
     // Reset API Key Button
     const resetButton = document.createElement("button");
     resetButton.textContent = "Reset API Key";
-    resetButton.style.backgroundColor = "#ff4c4c";
-    resetButton.style.color = "white";
-    resetButton.style.border = "none";
-    resetButton.style.padding = "8px 12px";
-    resetButton.style.borderRadius = "5px";
-    resetButton.style.cursor = "pointer";
+    resetButton.id = "reset-button"
     resetButton.onclick = () => {
         localStorage.removeItem("apiKey");
         apiKey = null;
@@ -194,12 +152,7 @@ const createSidebar = () => {
 const createToolButton = (text, onClick) => {
     const button = document.createElement("button");
     button.textContent = text;
-    button.style.backgroundColor = "#6835F4";
-    button.style.color = "white";
-    button.style.border = "none";
-    button.style.padding = "8px 12px";
-    button.style.borderRadius = "5px";
-    button.style.cursor = "pointer";
+    button.id = "create-tool"
     button.onclick = () => {
         if (!apiKey) {
             console.log("Please enter an API key first!");
@@ -409,15 +362,10 @@ const selectElement = (element) => {
     const overlay = document.createElement("div");
     overlay.id = "selection-border-overlay";
     const rect = element.getBoundingClientRect();
-    overlay.style.position = "absolute";
     overlay.style.left = `${rect.left + window.scrollX}px`;
     overlay.style.top = `${rect.top + window.scrollY}px`;
     overlay.style.width = `${rect.width}px`;
     overlay.style.height = `${rect.height}px`;
-    overlay.style.border = "3px solid #6835F4";
-    overlay.style.boxShadow = "0 0 10px 2px rgba(104, 53, 244, 0.75)";
-    overlay.style.pointerEvents = "none";
-    overlay.style.zIndex = "9999";
     document.body.appendChild(overlay);
 
     previouslySelectedElement = element;
@@ -427,10 +375,11 @@ const selectElement = (element) => {
 
 const updateXpathDisplay = (childCount = 0) => {
     const xpathContainer = document.getElementById("xpath-container");
+    const scraper = JSON.parse(localStorage.getItem("scraper"))
     if (!xpathContainer) return;
-    
     xpathContainer.innerHTML = `
     <div style="display:flex;flex-direction:column;">
+    <p style="font-size: 16px;color:black;margin-bottom:4px;">Robot ID: <strong>${scraper.robot_id}</strong></p>
         <div style="padding: 10px; margin-bottom: 10px; background-color: #fff; 
             border: 1px solid #ddd; border-radius: 4px; word-break: break-word;">
             <code style="color: #6835F4; font-family: monospace;">${currentXPath || 'No selection'}</code>
@@ -445,7 +394,7 @@ const updateXpathDisplay = (childCount = 0) => {
                 cursor: ${currentXPath ? 'pointer' : 'not-allowed'};
             " ${!currentXPath ? 'disabled' : ''}>Copy XPath</button>
         </div>
-        <p style="font-size: 16px;color:black;">Children: <strong>${childCount}</strong></p>
+        <p style="font-size: 16px;color:black;">${scraper.mode == "list" ? "nbr_rows" : "nbr_items"}: <strong>${childCount}</strong></p>
     </div>`;
 };
 
