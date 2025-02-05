@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "XPath Finder",
+  "name": "Minexa Container Visualizer",
   "version": "2.1",
   "permissions": ["activeTab", "scripting"],
   "host_permissions": ["<all_urls>"],
@@ -9,6 +9,9 @@
   },
   "background": {
     "service_worker": "background.js"
+  },
+  "icons": {
+    "128": "logo.png"
   },
   "web_accessible_resources": [
     {
