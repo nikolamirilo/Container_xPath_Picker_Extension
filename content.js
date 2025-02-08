@@ -17,15 +17,14 @@ link.href = chrome.runtime.getURL('styles.css');
 document.head.appendChild(link);
 
 const shouldOpenExtension = () => {
-    return urlParams.has("extension") && urlParams.get("extension") === "true";
+    return urlParams.has("webapp_extension") && urlParams.get("webapp_extension") === "true";
 };
 
 const openExtension = () => {
     createSidebar();
     const scraper = {
-        robot_id: urlParams.get("robot_id"),
-        mode: urlParams.get("mode"),
-        xpath: urlParams.get("xpath"),
+        robot_id: urlParams.get("webapp_robot_id"),
+        xpath: urlParams.get("webapp_xpath"),
         ufn: urlParams.get("ufn")
     }
     localStorage.setItem("scraper", JSON.stringify(scraper))
