@@ -1,0 +1,1 @@
+const list = "https://www.binance.com/en/markets/trading_data/rankings?webapp_extension=true&webapp_xpath=/html/body/div[3]/div/div/div/main/div/div[3]/div[2]/div/div/div&ufn=5feae395ca371dc0a46402ed4bd09c3a&webapp_robot_id=834"

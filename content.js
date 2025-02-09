@@ -5,47 +5,75 @@ let startX = 0,
     startY = 0;
 let selectionRectangle = null;
 let sidebarVisible = true;
-let urlParams = new URLSearchParams(window.location.search);
+// let urlParams = new URLSearchParams(window.location.search);
 let urlXPath = "";
 let currentElementIndex = -1;
 let parentElements = [];
 
+const getUrlParams = () => new URLSearchParams(window.location.search);
+const urlParams = getUrlParams();
+
+// Inject CSS
 const link = document.createElement('link');
 link.rel = 'stylesheet';
 link.type = 'text/css';
 link.href = chrome.runtime.getURL('styles.css');
 document.head.appendChild(link);
 
-const shouldOpenExtension = () => {
-    return urlParams.has("webapp_extension") && urlParams.get("webapp_extension") === "true";
-};
+const shouldOpenExtension = () => urlParams.get("webapp_extension")?.toLowerCase() === "true";
 
-const openExtension = () => {
-    createSidebar();
-    const scraper = {
-        robot_id: urlParams.get("webapp_robot_id"),
-        xpath: urlParams.get("webapp_xpath"),
-        ufn: urlParams.get("ufn")
+chrome.runtime.sendMessage(
+    { action: "fetchData", data: { robot_id: urlParams.get("webapp_robot_id"), javascript: null, ufn: urlParams.get("ufn")} },
+    res => {
+        if (!res || !res.data || !res.data.robot_full) {
+            console.error("Invalid response:", res);
+            return;
+        }
+
+        const robotData = res.data.robot_full;
+        console.log("Robot Data:", robotData);
+        const mode = robotData.request?.mode || "detail"
+        const containers = robotData.response.containers.filter(item => item.mode == mode)
+        localStorage.setItem("containers", JSON.stringify(containers))
+        const scraper = {
+            robot_id: urlParams.get("webapp_robot_id"),
+            xpath: urlParams.get("webapp_xpath"),
+            mode: mode, 
+            ufn: urlParams.get("ufn")
+        };
+        localStorage.setItem("scraper", JSON.stringify(scraper));
     }
-    localStorage.setItem("scraper", JSON.stringify(scraper))
+);
+
+
+const openExtension = async () => {
+    createSidebar();
+    const scraper = JSON.parse(localStorage.getItem("scraper") || urlParams.get("webapp_xpath"));
     if (scraper.xpath) {
         const element = getElementByXPath(scraper.xpath);
         if (element) {
             selectElement(element);
         }
+    } else {
+        console.warn("No valid XPath found in scraper data.");
     }
 };
 
+window.addEventListener("beforeunload", () => {
+    localStorage.clear();
+});
+
+
 window.addEventListener("load", () => {
     if (shouldOpenExtension()) {
-        if(urlParams.has("ufn")){
-            localStorage.setItem("ufn", urlParams.get("ufn"))
-            openExtension(); 
-        }else{
-            alert("You don't have correct link")
+        if (urlParams.has("ufn")) {
+            openExtension();
+        } else {
+            alert("You don't have the correct link");
         }
     }
 });
+
 
 const createSidebar = () => {
     const sidebar = document.createElement("div");
@@ -315,14 +343,32 @@ const getXPath = (el) => {
         : `${parentXPath}/${tagName}`;
 };
 
-
 const updateXpathDisplay = (childCount = 0) => {
     const xpathContainer = document.getElementById("xpath-container");
-    const scraper = JSON.parse(localStorage.getItem("scraper"))
     if (!xpathContainer) return;
+
+    const scraper = JSON.parse(localStorage.getItem("scraper") || "{}");
+    const containers = JSON.parse(localStorage.getItem("containers") || "[]");
+
+    if (!currentXPath) {
+        console.warn("No valid XPath found.");
+        xpathContainer.innerHTML = `<p style="color:red;">No valid XPath found.</p>`;
+        return;
+    }
+
+    const matchXpath = containers.find(item => item.xpath === currentXPath) || null;
+
+    let key = "N/A", value = "N/A";
+    if (matchXpath && matchXpath.scoring) {
+        const firstEntry = Object.entries(matchXpath.scoring)[0];
+        if (firstEntry) {
+            [key, value] = firstEntry;
+        }
+    }
+
     xpathContainer.innerHTML = `
     <div style="display:flex;flex-direction:column;">
-    <p style="font-size: 16px;color:black;margin-bottom:4px;">Robot ID: <strong>${scraper.robot_id}</strong></p>
+        <p style="font-size: 16px;color:black;margin-bottom:4px;">Robot ID: <strong>${scraper.robot_id || "N/A"}</strong></p>
         <div style="padding: 10px; margin-bottom: 10px; background-color: #fff; 
             border: 1px solid #ddd; border-radius: 4px; word-break: break-word;">
             <code style="color: #6835F4; font-family: monospace;">${currentXPath || 'No selection'}</code>
@@ -337,9 +383,22 @@ const updateXpathDisplay = (childCount = 0) => {
                 cursor: ${currentXPath ? 'pointer' : 'not-allowed'};
             " ${!currentXPath ? 'disabled' : ''}>Copy XPath</button>
         </div>
-        <p style="font-size: 16px;color:black;">${scraper.mode == "list" ? "nbr_rows" : "nbr_items"}: <strong>${childCount}</strong></p>
+        <p style="font-size: 16px;color:black;">${scraper.mode === "list" ? "real_nbr_rows" : "real_nbr_items"}: <strong>${childCount}</strong></p>
+        <span style="font-size: 16px;color:black;">${scraper.mode === "list" ? "robot_nbr_rows" : "robot_nbr_items"}: <strong>${value}</strong></span>
+        <span style="font-size: 16px;color:black;">${matchXpath ? "Match" : "No match"}</span>
+        <span style="font-size: 16px;color:red;">${(matchXpath && childCount != value) ? "Note: The extracted number of rows/items does not match the actual count.": ""}</span>
     </div>`;
 };
+
+
+
+function matchXPath (containers, xpath){
+    if(containers.some(item => item.xpath == xpath)){
+        return containers.find(item => item.xpath == xpath)
+    }else{
+        return false
+    }
+}
 
 const selectParent = () => {
     if (previouslySelectedElement?.parentElement && !isElementInSidebar(previouslySelectedElement.parentElement)) {
@@ -383,3 +442,4 @@ const getElementByXPath = (xPath) => {
         return null;
     }
 };
+
