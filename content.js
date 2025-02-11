@@ -356,7 +356,7 @@ const updateXpathDisplay = (childCount = 0) => {
         return;
     }
 
-    const matchXpath = containers.find(item => item.xpath === currentXPath) || null;
+    const matchXpath = handleMatchXPath(currentXPath, containers)
 
     let key = "N/A", value = "N/A";
     if (matchXpath && matchXpath.scoring) {
@@ -390,15 +390,39 @@ const updateXpathDisplay = (childCount = 0) => {
     </div>`;
 };
 
-
-
-function matchXPath (containers, xpath){
-    if(containers.some(item => item.xpath == xpath)){
-        return containers.find(item => item.xpath == xpath)
-    }else{
-        return false
+function normalizeXPath(xpath) {
+    const parts = xpath.split('/').filter(p => p !== ''); // Split into parts and remove empty strings
+    const normalizedParts = parts.map(part => {
+      const match = part.match(/^([^\[]+)(?:\[(\d+)\])?$/);
+      if (!match) return part; // Fallback for unexpected formats
+      const tag = match[1];
+      const index = match[2] ? parseInt(match[2], 10) : 1;
+      return index === 1 ? tag : `${tag}[${index}]`;
+    });
+    return '/' + normalizedParts.join('/');
+  }
+  
+  function handleMatchXPath(
+    xpath_of_clicked_el,
+    all_containers_matched = []
+  ) {
+    const paths = xpath_of_clicked_el.split('/').filter(Boolean);
+    for (let i = paths.length - 1; i >= 0; i--) {
+      const shorterPath = '/' + paths.slice(0, i + 1).join('/');
+      const normalizedShorter = normalizeXPath(shorterPath);
+      for (const container of all_containers_matched) {
+        const containerNormalized = normalizeXPath(container.xpath);
+        if (containerNormalized === normalizedShorter) {
+        //   console.log('Matching container found:', container);
+          console.log("Robot Container", container.xpath)
+          console.log("Clicked Element XPath", xpath_of_clicked_el)
+          return container;
+        }
+      }
     }
-}
+    console.log('No matching container found.');
+    return null;
+  }
 
 const selectParent = () => {
     if (previouslySelectedElement?.parentElement && !isElementInSidebar(previouslySelectedElement.parentElement)) {
