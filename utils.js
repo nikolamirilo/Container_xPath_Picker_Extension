@@ -137,77 +137,66 @@ function addParentContainersOfXpathToContainersMatching(containersMatching, leve
 }
 
 function getXpathParentBackFromXpath(xpath, levelsBack) {
-    const parts = xpath.split('/');
-    parts.splice(-levelsBack);
-    return parts.join('/');
+    if(xpath){
+        const parts = xpath.split('/');
+        parts.splice(-levelsBack);
+        return parts.join('/');
+    }
 }
 
 function getContainerDataFromContainerXPath(xpath, containersList) {
     return containersList.find(container => container.xpath === xpath);
 }
 
+//xPath Handling Basic
 
-// Sample containersList
-const containersList = [
-    {
-        id: 1,
-        xpath: "/html/body/div[1]/div[2]/div[3]",
-        mode: "list",
-        scoring: { nbr_rows: 10, rows_regularity: 0.9 }
-    },
-    {
-        id: 2,
-        xpath: "/html/body/div[1]/div[2]/div[3]/div[1]",
-        mode: "list",
-        scoring: { nbr_rows: 5, rows_regularity: 0.8 }
-    },
-    {
-        id: 3,
-        xpath: "/html/body/div[1]/div[2]/div[4]",
-        mode: "detail",
-        scoring: { nbr_items: 3 }
-    },
-    {
-        id: 4,
-        xpath: "/html/body/div[1]/div[2]",
-        mode: "list",
-        scoring: { nbr_rows: 15, rows_regularity: 0.95 }
+const getXPath = (el) => {
+    if (!el || el.nodeType !== 1) return "";
+    if (el === document.body) return "/html/body";
+
+    let index = 1;
+    let sibling = el.previousElementSibling;
+    
+    while (sibling) {
+        if (sibling.nodeName === el.nodeName) {
+            index++;
+        }
+        sibling = sibling.previousElementSibling;
     }
-];
 
-// Selected XPath
-const selectedXPath = "/html/body/div[1]/div[2]/div[3]/div[1]";
+    const parentXPath = getXPath(el.parentElement);
+    const tagName = el.tagName.toLowerCase();
+    
+    return index > 1 
+        ? `${parentXPath}/${tagName}[${index}]`
+        : `${parentXPath}/${tagName}`;
+};
 
-// Expected Output
-const expectedOutput = [
-    {
-        id: 2,
-        xpath: "/html/body/div[1]/div[2]/div[3]/div[1]",
-        mode: "list",
-        scoring: { nbr_rows: 5, rows_regularity: 0.8 }
-    },
-    {
-        id: 1,
-        xpath: "/html/body/div[1]/div[2]/div[3]",
-        mode: "list",
-        scoring: { nbr_rows: 10, rows_regularity: 0.9 }
-    },
-    {
-        id: 4,
-        xpath: "/html/body/div[1]/div[2]",
-        mode: "list",
-        scoring: { nbr_rows: 15, rows_regularity: 0.95 }
+const getElementByXPath = (xPath) => {
+    try {
+        return document.evaluate(
+            xPath,
+            document,
+            null,
+            XPathResult.FIRST_ORDERED_NODE_TYPE,
+            null
+        ).singleNodeValue;
+    } catch (error) {
+        console.error("Invalid XPath:", xPath, error);
+        return null;
     }
-];
+};
 
-// Run the function
-const result = handleSelectRightContainerClick(selectedXPath, containersList);
+const isElementInSidebar = (element) => {
+    const sidebar = document.getElementById("xpath-sidebar");
+    return sidebar && sidebar.contains(element);
+};
 
-// Verify the result
-console.log("Test Result:");
-console.log("Expected Output:", JSON.stringify(expectedOutput, null, 2));
-console.log("Actual Output:", JSON.stringify(result, null, 2));
-
-// Assertion
-const isEqual = JSON.stringify(result) === JSON.stringify(expectedOutput);
-console.log("Test Passed:", isEqual);
+const getElementDepth = (el) => {
+    let depth = 0;
+    while (el.parentElement) {
+        depth++;
+        el = el.parentElement;
+    }
+    return depth;
+};

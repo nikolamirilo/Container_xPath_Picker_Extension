@@ -13,14 +13,18 @@ let parentElements = [];
 const getUrlParams = () => new URLSearchParams(window.location.search);
 const urlParams = getUrlParams();
 
-// Inject CSS
 const link = document.createElement('link');
 link.rel = 'stylesheet';
 link.type = 'text/css';
 link.href = chrome.runtime.getURL('styles.css');
 document.head.appendChild(link);
 
-const shouldOpenExtension = () => urlParams.get("webapp_extension")?.toLowerCase() === "true";
+const shouldOpenExtension = () => {
+    const scraper = JSON.parse(localStorage.getItem("scraper"))
+    if(urlParams.get("webapp_extension")?.toLowerCase() === "true" || scraper.extension){
+        return true
+    }
+}
 
 chrome.runtime.sendMessage(
     { action: "fetchData", data: { robot_id: urlParams.get("webapp_robot_id"), javascript: null, ufn: urlParams.get("ufn")} },
@@ -39,7 +43,8 @@ chrome.runtime.sendMessage(
             robot_id: urlParams.get("webapp_robot_id"),
             xpath: urlParams.get("webapp_xpath"),
             mode: mode, 
-            ufn: urlParams.get("ufn")
+            ufn: urlParams.get("ufn"),
+            extension: true
         };
         localStorage.setItem("scraper", JSON.stringify(scraper));
     }
@@ -48,9 +53,11 @@ chrome.runtime.sendMessage(
 
 const openExtension = async () => {
     createSidebar();
-    const scraper = JSON.parse(localStorage.getItem("scraper") || urlParams.get("webapp_xpath"));
-    if (scraper.xpath) {
-        const element = getElementByXPath(scraper.xpath);
+    const scraper = JSON.parse(localStorage.getItem("scraper"))
+    const xpath = urlParams.get("webapp_xpath") || scraper.xpath;
+    console.log(xpath)
+    if (xpath) {
+        const element = getElementByXPath(xpath);
         if (element) {
             selectElement(element);
         }
@@ -59,12 +66,14 @@ const openExtension = async () => {
     }
 };
 
+
 window.addEventListener("beforeunload", () => {
     localStorage.clear();
 });
 
 
 window.addEventListener("load", () => {
+    localStorage.setItem("test", "test")
     if (shouldOpenExtension()) {
         if (urlParams.has("ufn")) {
             openExtension();
@@ -80,11 +89,9 @@ const createSidebar = () => {
     sidebar.id = "xpath-sidebar";
     document.body.appendChild(sidebar);
 
-    // Main Content Container
     const mainContentContainer = document.createElement("div");
     mainContentContainer.id = "main-content-container";
 
-    // Header Row
     const headerRow = document.createElement("div");
     headerRow.id = "header-row"
 
@@ -100,7 +107,6 @@ const createSidebar = () => {
 
     mainContentContainer.appendChild(headerRow);
 
-    // XPath Container
     const xpathContainer = document.createElement("div");
     xpathContainer.id = "xpath-container";
     xpathContainer.innerHTML = `
@@ -111,11 +117,9 @@ const createSidebar = () => {
     `;
     mainContentContainer.appendChild(xpathContainer);
 
-    // Button Container
     const buttonContainer = document.createElement("div");
     buttonContainer.id = "button-container"
 
-    // Navigation controls
     const navContainer = document.createElement("div");
     navContainer.style.display = "flex";
     navContainer.style.gap = "8px";
@@ -144,7 +148,6 @@ const createToolButton = (text, onClick) => {
     return button;
 };
 
-// New navigation functions
 const selectPreviousSibling = () => {
     if (!previouslySelectedElement?.parentElement) return;
     
@@ -234,6 +237,7 @@ document.addEventListener("mouseup", (event) => {
 });
 
 const selectElement = (element) => {
+    if (!element || !shouldOpenExtension()) return;
     if (!element) return;
     
     const xpath = getXPath(element);
@@ -264,22 +268,6 @@ const selectElement = (element) => {
     updateXpathDisplay(childCount);
 };
 
-
-const isElementInSidebar = (element) => {
-    const sidebar = document.getElementById("xpath-sidebar");
-    return sidebar && sidebar.contains(element);
-};
-
-
-// Helper function to calculate DOM depth
-const getElementDepth = (el) => {
-    let depth = 0;
-    while (el.parentElement) {
-        depth++;
-        el = el.parentElement;
-    }
-    return depth;
-};
 
 document.addEventListener("click", (event) => {
     const element = event.target;
@@ -319,29 +307,6 @@ const closeSidebar = (sidebar) => {
 };
 
 
-const getXPath = (el) => {
-    if (!el || el.nodeType !== 1) return "";
-    if (el === document.body) return "/html/body";
-
-    let index = 1;
-    let sibling = el.previousElementSibling;
-    
-    // Count only elements with the same tag name
-    while (sibling) {
-        if (sibling.nodeName === el.nodeName) {
-            index++;
-        }
-        sibling = sibling.previousElementSibling;
-    }
-
-    const parentXPath = getXPath(el.parentElement);
-    const tagName = el.tagName.toLowerCase();
-    
-    // Use more specific indexing
-    return index > 1 
-        ? `${parentXPath}/${tagName}[${index}]`
-        : `${parentXPath}/${tagName}`;
-};
 
 const updateXpathDisplay = (childCount = 0) => {
     const xpathContainer = document.getElementById("xpath-container");
@@ -356,7 +321,7 @@ const updateXpathDisplay = (childCount = 0) => {
         return;
     }
 
-    const matchXpath = handleMatchXPath(currentXPath, containers)
+    const matchXpath = handleSelectRightContainerClick(currentXPath, containers)[0]
 
     let key = "N/A", value = "N/A";
     if (matchXpath && matchXpath.scoring) {
@@ -390,39 +355,6 @@ const updateXpathDisplay = (childCount = 0) => {
     </div>`;
 };
 
-function normalizeXPath(xpath) {
-    const parts = xpath.split('/').filter(p => p !== ''); // Split into parts and remove empty strings
-    const normalizedParts = parts.map(part => {
-      const match = part.match(/^([^\[]+)(?:\[(\d+)\])?$/);
-      if (!match) return part; // Fallback for unexpected formats
-      const tag = match[1];
-      const index = match[2] ? parseInt(match[2], 10) : 1;
-      return index === 1 ? tag : `${tag}[${index}]`;
-    });
-    return '/' + normalizedParts.join('/');
-}
-  
-function handleMatchXPath(
-    xpath_of_clicked_el,
-    all_containers_matched = []
-  ) {
-    const paths = xpath_of_clicked_el.split('/').filter(Boolean);
-    for (let i = paths.length - 1; i >= 0; i--) {
-      const shorterPath = '/' + paths.slice(0, i + 1).join('/');
-      const normalizedShorter = normalizeXPath(shorterPath);
-      for (const container of all_containers_matched) {
-        const containerNormalized = normalizeXPath(container.xpath);
-        if (containerNormalized === normalizedShorter) {
-        //   console.log('Matching container found:', container);
-          console.log("Robot Container", container.xpath)
-          console.log("Clicked Element XPath", xpath_of_clicked_el)
-          return container;
-        }
-      }
-    }
-    console.log('No matching container found.');
-    return null;
-}
 
 const selectParent = () => {
     if (previouslySelectedElement?.parentElement && !isElementInSidebar(previouslySelectedElement.parentElement)) {
@@ -452,18 +384,4 @@ const selectChild = () => {
     }
 };
 
-const getElementByXPath = (xPath) => {
-    try {
-        return document.evaluate(
-            xPath,
-            document,
-            null,
-            XPathResult.FIRST_ORDERED_NODE_TYPE,
-            null
-        ).singleNodeValue;
-    } catch (error) {
-        console.error("Invalid XPath:", xPath, error);
-        return null;
-    }
-};
 

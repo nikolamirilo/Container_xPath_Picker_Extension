@@ -1,2 +1,5 @@
-- initial selection of container
-- extend matching function if number of real rows is lower than the one in extracted rows then it is fine
+- [x] initial selection of container
+- [x] extend matching function if number of real rows is lower than the one in extracted rows then it is fine
+- [] Transfer app to React or some other technology
+- [] Refactor code
+- [] Use just local storage to store data (avoid url params)
