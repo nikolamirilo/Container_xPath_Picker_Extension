@@ -400,9 +400,9 @@ function normalizeXPath(xpath) {
       return index === 1 ? tag : `${tag}[${index}]`;
     });
     return '/' + normalizedParts.join('/');
-  }
+}
   
-  function handleMatchXPath(
+function handleMatchXPath(
     xpath_of_clicked_el,
     all_containers_matched = []
   ) {
@@ -422,7 +422,7 @@ function normalizeXPath(xpath) {
     }
     console.log('No matching container found.');
     return null;
-  }
+}
 
 const selectParent = () => {
     if (previouslySelectedElement?.parentElement && !isElementInSidebar(previouslySelectedElement.parentElement)) {
