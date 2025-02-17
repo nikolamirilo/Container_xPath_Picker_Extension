@@ -1,5 +1,6 @@
 - [x] initial selection of container
 - [x] extend matching function if number of real rows is lower than the one in extracted rows then it is fine
-- [] Transfer app to React or some other technology
-- [] Refactor code
-- [] Use just local storage to store data (avoid url params)
+- [ ] Transfer app to React or some other technology
+- [ ] Refactor code
+- [ ] Use just local storage to store data (avoid url params)
+- [ ] UFN real check and if it is not correct then do not allow user to proceed

@@ -5,13 +5,19 @@ let startX = 0,
     startY = 0;
 let selectionRectangle = null;
 let sidebarVisible = true;
-// let urlParams = new URLSearchParams(window.location.search);
-let urlXPath = "";
+let urlParams = new URLSearchParams(window.location.search);
 let currentElementIndex = -1;
 let parentElements = [];
+const authValues = {
+    extension: urlParams.get("webapp_extension") ,
+    robot_id: urlParams.get("webapp_robot_id"),
+    xpath: urlParams.get("webapp_xpath"),
+    ufn: urlParams.get("ufn"),
+};
 
-const getUrlParams = () => new URLSearchParams(window.location.search);
-const urlParams = getUrlParams();
+
+// const getUrlParams = () => new URLSearchParams(window.location.search);
+// const urlParams = getUrlParams();
 
 const link = document.createElement('link');
 link.rel = 'stylesheet';
@@ -20,68 +26,82 @@ link.href = chrome.runtime.getURL('styles.css');
 document.head.appendChild(link);
 
 const shouldOpenExtension = () => {
-    const scraper = JSON.parse(localStorage.getItem("scraper"))
-    if(urlParams.get("webapp_extension")?.toLowerCase() === "true" || scraper.extension){
-        return true
-    }
-}
+    const scraper = JSON.parse(localStorage.getItem("scraper") || "{}");
+    const authValues = {
+        extension: urlParams.get("webapp_extension") || scraper.extension,
+        robot_id: urlParams.get("webapp_robot_id") || scraper.robot_id,
+        xpath: urlParams.get("webapp_xpath") || scraper.xpath,
+        ufn: urlParams.get("ufn") || scraper.ufn,
+    };
+
+    return authValues.extension && authValues.robot_id && authValues.xpath && authValues.ufn;
+};
+
 
 chrome.runtime.sendMessage(
-    { action: "fetchData", data: { robot_id: urlParams.get("webapp_robot_id"), javascript: null, ufn: urlParams.get("ufn")} },
+    { action: "fetchData", data: { robot_id: urlParams.get("webapp_robot_id"), javascript: null, ufn: urlParams.get("ufn") } },
     res => {
-        if (!res || !res.data || !res.data.robot_full) {
-            console.error("Invalid response:", res);
-            return;
+        try {
+            const robotData = res.data.robot_full;
+            console.log(res)
+            console.log("res.statusCode: ", res.statusCode)
+            console.log("res.ok: ", res.ok)
+            console.log("res.status: ", res.status)
+            // if (res.ok) {
+                console.log("Robot Data:", robotData);
+                const mode = robotData.request?.mode || "detail"
+                const containers = robotData.response.containers.filter(item => item.mode == mode)
+                localStorage.setItem("containers", JSON.stringify(containers))
+                const scraper = {
+                    robot_id: urlParams.get("webapp_robot_id"),
+                    xpath: urlParams.get("webapp_xpath"),
+                    mode: mode,
+                    ufn: urlParams.get("ufn"),
+                    extension: true
+                };
+                localStorage.setItem("scraper", JSON.stringify(scraper));
+                handleOpenExtension()
+            // } else {
+            //     alert("Your link is not correct")
+            // }
+        } catch (error) {
+            console.error(error)
         }
-
-        const robotData = res.data.robot_full;
-        console.log("Robot Data:", robotData);
-        const mode = robotData.request?.mode || "detail"
-        const containers = robotData.response.containers.filter(item => item.mode == mode)
-        localStorage.setItem("containers", JSON.stringify(containers))
-        const scraper = {
-            robot_id: urlParams.get("webapp_robot_id"),
-            xpath: urlParams.get("webapp_xpath"),
-            mode: mode, 
-            ufn: urlParams.get("ufn"),
-            extension: true
-        };
-        localStorage.setItem("scraper", JSON.stringify(scraper));
     }
 );
 
 
-const openExtension = async () => {
-    createSidebar();
+const handleOpenExtension = async () => {
     const scraper = JSON.parse(localStorage.getItem("scraper"))
     const xpath = urlParams.get("webapp_xpath") || scraper.xpath;
-    console.log(xpath)
-    if (xpath) {
-        const element = getElementByXPath(xpath);
-        if (element) {
-            selectElement(element);
-        }
-    } else {
-        console.warn("No valid XPath found in scraper data.");
-    }
-};
-
-
-window.addEventListener("beforeunload", () => {
-    localStorage.clear();
-});
-
-
-window.addEventListener("load", () => {
-    localStorage.setItem("test", "test")
     if (shouldOpenExtension()) {
-        if (urlParams.has("ufn")) {
-            openExtension();
+        if (scraper.ufn) {
+            createSidebar();
+            console.log(xpath)
+            if (xpath) {
+                const element = getElementByXPath(xpath);
+                if (element) {
+                    selectElement(element);
+                }
+            } else {
+                console.warn("No valid XPath found in scraper data.");
+            }
         } else {
             alert("You don't have the correct link");
         }
     }
-});
+
+};
+
+
+// window.addEventListener("beforeunload", () => {
+//     localStorage.clear();
+// });
+
+
+// window.addEventListener("load", () => {
+
+// });
 
 
 const createSidebar = () => {
@@ -124,7 +144,7 @@ const createSidebar = () => {
     navContainer.style.display = "flex";
     navContainer.style.gap = "8px";
     navContainer.style.marginBottom = "10px";
-    
+
     navContainer.appendChild(createToolButton("←", selectPreviousSibling));
     navContainer.appendChild(createToolButton("→", selectNextSibling));
 
@@ -150,10 +170,10 @@ const createToolButton = (text, onClick) => {
 
 const selectPreviousSibling = () => {
     if (!previouslySelectedElement?.parentElement) return;
-    
+
     const siblings = Array.from(previouslySelectedElement.parentElement.children)
         .filter(el => !isElementInSidebar(el));
-    
+
     const currentIndex = siblings.indexOf(previouslySelectedElement);
     if (currentIndex > 0) {
         selectElement(siblings[currentIndex - 1]);
@@ -162,10 +182,10 @@ const selectPreviousSibling = () => {
 
 const selectNextSibling = () => {
     if (!previouslySelectedElement?.parentElement) return;
-    
+
     const siblings = Array.from(previouslySelectedElement.parentElement.children)
         .filter(el => !isElementInSidebar(el));
-    
+
     const currentIndex = siblings.indexOf(previouslySelectedElement);
     if (currentIndex < siblings.length - 1) {
         selectElement(siblings[currentIndex + 1]);
@@ -239,7 +259,7 @@ document.addEventListener("mouseup", (event) => {
 const selectElement = (element) => {
     if (!element || !shouldOpenExtension()) return;
     if (!element) return;
-    
+
     const xpath = getXPath(element);
     const childCount = element.children.length;
 
@@ -257,14 +277,14 @@ const selectElement = (element) => {
     document.body.appendChild(overlay);
     previouslySelectedElement = element;
     currentXPath = xpath;
-    
+
     // Store parent and siblings information
     if (element.parentElement) {
         parentElements = Array.from(element.parentElement.children)
             .filter(el => !isElementInSidebar(el));
         currentElementIndex = parentElements.indexOf(element);
     }
-    
+
     updateXpathDisplay(childCount);
 };
 
@@ -308,20 +328,23 @@ const closeSidebar = (sidebar) => {
 
 
 
-const updateXpathDisplay = (childCount = 0) => {
+const updateXpathDisplay = async (childCount = 0) => {
     const xpathContainer = document.getElementById("xpath-container");
     if (!xpathContainer) return;
 
-    const scraper = JSON.parse(localStorage.getItem("scraper") || "{}");
-    const containers = JSON.parse(localStorage.getItem("containers") || "[]");
+    const scraper = await JSON.parse(localStorage.getItem("scraper") || "{}");
+    const containers = await JSON.parse(localStorage.getItem("containers") || "[]");
 
     if (!currentXPath) {
         console.warn("No valid XPath found.");
         xpathContainer.innerHTML = `<p style="color:red;">No valid XPath found.</p>`;
         return;
     }
+    const matchResult = await handleSelectRightContainerClick(currentXPath, containers);
+    const matchXpath = matchResult?.[0] || null;
 
-    const matchXpath = handleSelectRightContainerClick(currentXPath, containers)[0]
+
+    const robot_id = scraper.robot_id || urlParams.get("webapp_robot_id")
 
     let key = "N/A", value = "N/A";
     if (matchXpath && matchXpath.scoring) {
@@ -329,30 +352,29 @@ const updateXpathDisplay = (childCount = 0) => {
         if (firstEntry) {
             [key, value] = firstEntry;
         }
+        xpathContainer.innerHTML = `
+        <div style="display:flex;flex-direction:column;">
+            <p style="font-size: 16px;color:black;margin-bottom:4px;">Robot ID: <strong>${robot_id || "N/A"}</strong></p>
+            <div style="padding: 10px; margin-bottom: 10px; background-color: #fff; 
+                border: 1px solid #ddd; border-radius: 4px; word-break: break-word;">
+                <code style="color: #6835F4; font-family: monospace;">${currentXPath || 'No selection'}</code>
+                <button id="copy-button" style="
+                    display: block;
+                    margin-top: 10px;
+                    background-color: ${currentXPath ? '#6835F4' : '#999'}; 
+                    color: white; 
+                    border: none; 
+                    padding: 5px 10px; 
+                    border-radius: 5px; 
+                    cursor: ${currentXPath ? 'pointer' : 'not-allowed'};
+                " ${!currentXPath ? 'disabled' : ''}>Copy XPath</button>
+            </div>
+            <p style="font-size: 16px;color:black;">${scraper.mode === "list" ? "real_nbr_rows" : "real_nbr_items"}: <strong>${childCount}</strong></p>
+            <span style="font-size: 16px;color:black;">${scraper.mode === "list" ? "robot_nbr_rows" : "robot_nbr_items"}: <strong>${value}</strong></span>
+            <span style="font-size: 16px;color:black;">${matchXpath ? "Match" : "No match"}</span>
+            <span style="font-size: 16px;color:red;">${(matchXpath && childCount != value) ? "Note: The extracted number of rows/items does not match the actual count." : ""}</span>
+        </div>`;
     }
-
-    xpathContainer.innerHTML = `
-    <div style="display:flex;flex-direction:column;">
-        <p style="font-size: 16px;color:black;margin-bottom:4px;">Robot ID: <strong>${scraper.robot_id || "N/A"}</strong></p>
-        <div style="padding: 10px; margin-bottom: 10px; background-color: #fff; 
-            border: 1px solid #ddd; border-radius: 4px; word-break: break-word;">
-            <code style="color: #6835F4; font-family: monospace;">${currentXPath || 'No selection'}</code>
-            <button id="copy-button" style="
-                display: block;
-                margin-top: 10px;
-                background-color: ${currentXPath ? '#6835F4' : '#999'}; 
-                color: white; 
-                border: none; 
-                padding: 5px 10px; 
-                border-radius: 5px; 
-                cursor: ${currentXPath ? 'pointer' : 'not-allowed'};
-            " ${!currentXPath ? 'disabled' : ''}>Copy XPath</button>
-        </div>
-        <p style="font-size: 16px;color:black;">${scraper.mode === "list" ? "real_nbr_rows" : "real_nbr_items"}: <strong>${childCount}</strong></p>
-        <span style="font-size: 16px;color:black;">${scraper.mode === "list" ? "robot_nbr_rows" : "robot_nbr_items"}: <strong>${value}</strong></span>
-        <span style="font-size: 16px;color:black;">${matchXpath ? "Match" : "No match"}</span>
-        <span style="font-size: 16px;color:red;">${(matchXpath && childCount != value) ? "Note: The extracted number of rows/items does not match the actual count.": ""}</span>
-    </div>`;
 };
 
 
@@ -383,5 +405,3 @@ const selectChild = () => {
         alert("No child element found!");
     }
 };
-
-
